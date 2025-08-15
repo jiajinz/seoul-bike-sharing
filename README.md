@@ -1,11 +1,22 @@
-# Seoul Bike Sharing — Analytics API
+# 🚲 Seoul Bike Sharing Demand Forecast & Analytics Dashboard
 
-CSV-only, student-friendly backend project using **Django + Django REST Framework + Pandas** with **SQLite**.
-- Dataset: [Seoul Bike Sharing](https://www.kaggle.com/datasets/joebeachcapital/seoul-bike-sharing)
-- Goals: implement Django backend engineering, REST APIs, ETL, and (optional) Celery/CI/CD.
+A full-stack Django + DRF + Pandas project for visualizing, analyzing, and predicting Seoul Bike Sharing demand.  
+Includes interactive charts, KPIs, filtering, and machine learning predictions (hourly & daily).
 
-## Quick Start (after cloning)
-```bash
-python -m venv .venv
-source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+---
+
+## 📌 Features
+- **Data ingestion** from CSV into SQLite via Django management commands
+- **REST API** with Django REST Framework:
+  - Hourly & daily aggregated data
+  - KPIs and hourly heatmap
+  - Prediction endpoints (hour-level and 24-hour day forecast)
+- **Interactive dashboard** (Chart.js) with:
+  - KPI cards
+  - Daily trend chart (7-day rolling average)
+  - Hourly heatmap
+  - Forecast form with live chart
+- **ML Model** (RandomForestRegressor) trained with seasonal & lag features
+- **Caching** for faster KPI & chart responses
+- **Test coverage** for API endpoints
+- **CI-ready** with GitHub Actions

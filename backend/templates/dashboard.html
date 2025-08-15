@@ -1,0 +1,199 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Seoul Bike Sharing — Analytics</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      :root { --bg:#0b0f16; --card:#141b26; --text:#e8eef7; --muted:#9fb3c8; --border:#233044; }
+      *{box-sizing:border-box}
+      body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; background:var(--bg); color:var(--text);}
+      .wrap { max-width: 1200px; margin: 32px auto; padding: 0 16px; }
+      h1 { font-weight:700; letter-spacing:.3px; margin:0 0 12px 0; }
+      .sub { color: var(--muted); margin-bottom: 24px; }
+      .row { display:flex; flex-wrap:wrap; gap:16px; }
+      .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px; flex:1 1 360px; }
+      .kpis { display:grid; grid-template-columns: repeat(4, minmax(160px,1fr)); gap:12px; }
+      .kpi { background:#0f1722; border:1px solid var(--border); border-radius:12px; padding:12px; }
+      .kpi .label { color:var(--muted); font-size:12px; }
+      .kpi .value { font-size:24px; font-weight:700; margin-top:6px; }
+      label { font-size:12px; color:var(--muted); margin-right:8px; }
+      input, select, button { background:#0f1722; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 10px; }
+      button { cursor:pointer; }
+      .filters { display:flex; gap:10px; align-items:center; margin: 12px 0 18px; flex-wrap: wrap; }
+      canvas { max-width:100%; }
+      footer { margin: 24px 0; color: var(--muted); font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Seoul Bike Sharing — Analytics</h1>
+      <div class="sub">Explore demand patterns by day, hour, weather, and season.</div>
+
+      <div class="card">
+        <div class="filters">
+          <div><label>Start</label><input type="date" id="startDate"></div>
+          <div><label>End</label><input type="date" id="endDate"></div>
+          <div>
+            <label>Season</label>
+            <select id="season">
+              <option value="">All</option>
+              <option>Spring</option><option>Summer</option><option>Autumn</option><option>Winter</option>
+            </select>
+          </div>
+          <button id="applyBtn">Apply</button>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><div class="label">Rows</div><div class="value" id="kpiRows">–</div></div>
+          <div class="kpi"><div class="label">Total Rides</div><div class="value" id="kpiTotal">–</div></div>
+          <div class="kpi"><div class="label">Avg Temp (°C)</div><div class="value" id="kpiTemp">–</div></div>
+          <div class="kpi"><div class="label">Avg Humidity (%)</div><div class="value" id="kpiHum">–</div></div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:16px">
+        <div class="card">
+          <h3>Daily Rides & 7-Day Rolling</h3>
+          <canvas id="dailyChart" height="140"></canvas>
+        </div>
+        <div class="card">
+          <h3>Hourly Heatmap (Avg rides by weekday × hour)</h3>
+          <canvas id="heatmap" height="300"></canvas>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:16px">
+        <div class="card">
+          <h3>Season Breakdown (Daily totals)</h3>
+          <canvas id="seasonChart" height="120"></canvas>
+        </div>
+        <div class="card">
+          <h3>Forecast for Selected Day (24h)</h3>
+          <div class="filters" style="margin-top:8px">
+            <div><label>Date</label><input type="date" id="fcDate"></div>
+            <div><label>Season</label>
+              <select id="fcSeason"><option>Spring</option><option>Summer</option><option>Autumn</option><option>Winter</option></select>
+            </div>
+            <div><label>Holiday</label>
+              <select id="fcHoliday"><option>No Holiday</option><option>Holiday</option></select>
+            </div>
+            <div><label>Functioning</label>
+              <select id="fcFunc"><option>Yes</option><option>No</option></select>
+            </div>
+            <button id="fcBtn">Forecast</button>
+          </div>
+          <canvas id="forecastChart" height="120"></canvas>
+        </div>
+      </div>
+
+      <footer>Built with Django + DRF + Chart.js — <a href="https://github.com/" target="_blank" style="color:#9fb3c8">GitHub</a></footer>
+    </div>
+
+    <script>
+      async function getJSON(url){ const r = await fetch(url); return r.json(); }
+      function fmt(n){ return (n||0).toLocaleString(); }
+
+      async function loadBounds(){
+        const b = await getJSON("/api/v1/meta/date-bounds");
+        document.getElementById('startDate').value = b.start;
+        document.getElementById('endDate').value   = b.end;
+      }
+
+      function buildParams(){
+        const s = document.getElementById('startDate').value;
+        const e = document.getElementById('endDate').value;
+        const season = document.getElementById('season').value;
+        const params = [];
+        if (s) params.push(`start=${s}`);
+        if (e) params.push(`end=${e}`);
+        if (season) params.push(`season=${encodeURIComponent(season)}`);
+        return params.length ? `?${params.join("&")}` : "";
+      }
+
+      let dailyChart, seasonChart, heatmapChart, forecastChart;
+
+      async function loadKPIs(qs){
+        const data = await getJSON("/api/v1/kpis/basic"+qs);
+        document.getElementById("kpiRows").textContent  = fmt(data.rows);
+        document.getElementById("kpiTotal").textContent = fmt(data.total_rides);
+        document.getElementById("kpiTemp").textContent  = (data.avg_temp_c||0).toFixed(1);
+        document.getElementById("kpiHum").textContent   = (data.avg_humidity_pct||0).toFixed(1);
+      }
+
+      async function loadDaily(qs){
+        const data = await getJSON("/api/v1/daily/"+qs);
+        const labels = data.map(d => d.date);
+        const totals = data.map(d => d.total_rides);
+        const roll7  = data.map(d => d.roll7_total);
+
+        if (dailyChart) dailyChart.destroy();
+        dailyChart = new Chart(document.getElementById("dailyChart"), {
+          type: "line",
+          data: { labels, datasets: [{ label: "Daily Total", data: totals }, { label: "7-day Avg", data: roll7 }] }
+        });
+
+        const seasonTotals = {};
+        data.forEach(d => { const s = d.seasons_mode || "Unknown"; seasonTotals[s]=(seasonTotals[s]||0)+(d.total_rides||0); });
+        const sLabels = Object.keys(seasonTotals);
+        const sValues = sLabels.map(k => seasonTotals[k]);
+        if (seasonChart) seasonChart.destroy();
+        seasonChart = new Chart(document.getElementById("seasonChart"), {
+          type: "bar",
+          data: { labels: sLabels, datasets: [{ label: "Total Rides", data: sValues }] }
+        });
+      }
+
+      async function loadHeatmap(qs){
+        const res = await getJSON("/api/v1/kpis/hourly-heatmap"+qs);
+        const matrix = res.matrix, hours = res.hours, weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+        const points = []; let max=0;
+        matrix.forEach((row,r)=>row.forEach((v,c)=>{ points.push({x:c,y:r,v}); if(v>max) max=v; }));
+        if (heatmapChart) heatmapChart.destroy();
+        heatmapChart = new Chart(document.getElementById("heatmap"), {
+          type: "bubble",
+          data: { datasets: [{ label: "Avg rides", data: points.map(p => ({x:p.x,y:p.y,r:2+(max?(p.v/max)*12:0)})) }] },
+          options: {
+            scales: {
+              x: { type: "linear", min:0, max:23, ticks:{ stepSize:1, callback:(v)=>hours[v]??v } },
+              y: { type: "linear", min:0, max:6,  ticks:{ stepSize:1, callback:(v)=>weekdays[v]??v } },
+            },
+            plugins: { legend: { display:false } }
+          }
+        });
+      }
+
+      async function forecastDay(){
+        const date = document.getElementById('fcDate').value;
+        const seasons = document.getElementById('fcSeason').value;
+        const holiday = document.getElementById('fcHoliday').value;
+        const functioning_day = document.getElementById('fcFunc').value;
+        if(!date){ alert("Pick a forecast date"); return; }
+        const r = await fetch("/api/v1/predict/day", { method:"POST", headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ date, seasons, holiday, functioning_day }) });
+        const j = await r.json();
+        if(j.error){ alert(j.error); return; }
+        const labels = j.hours.map(h => `${h}:00`);
+        if (forecastChart) forecastChart.destroy();
+        forecastChart = new Chart(document.getElementById("forecastChart"), {
+          type: "line",
+          data: { labels, datasets: [{ label:`Forecast ${j.date}`, data: j.pred }] }
+        });
+      }
+
+      async function init(){
+        await loadBounds();
+        const btn = document.getElementById('applyBtn');
+        btn.addEventListener('click', async ()=>{
+          btn.disabled = true;
+          const qs = buildParams();
+          await Promise.all([loadKPIs(qs), loadDaily(qs), loadHeatmap(qs)]);
+          btn.disabled = false;
+        });
+        document.getElementById('fcBtn').addEventListener('click', forecastDay);
+        await Promise.all([loadKPIs(""), loadDaily(""), loadHeatmap("")]);
+      }
+      init();
+    </script>
+  </body>
+</html>

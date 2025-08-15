@@ -1,0 +1,33 @@
+# Virtual envs
+.venv/
+env/
+venv/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+
+# Django
+staticfiles/
+media/
+*.log
+
+# Environment files
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PyCharm / JetBrains
+.idea/
+*.iml
+
+# Node
+node_modules/
+dist/
+.build/
